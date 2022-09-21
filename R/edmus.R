@@ -1,11 +1,9 @@
-library(dplyr, warn.conflicts = FALSE)
+library(dplyr)
 library(lubridate)
 library(magrittr)
 library(purrr)
 library(readr)
-library(tidyr, warn.conflicts = FALSE)
-
-source("R/anonimize.R")
+library(tidyr)
 
 edmus_personal_data_path <- "data/edmus-personal-220813_133309-DEN.txt"
 edmus_diagnosis_data_path <- "data/edmus-diagnosis-220811_121631-DEP.txt"
@@ -111,8 +109,8 @@ edmus_assessments <- edmus_load_file(
 ) %>%
   rename(EDSS = `EDSS (entered)`) %>%
   mutate(`Concurrent relapse` = case_when(
-      `Concurrent relapse` == "Yes" ~ TRUE,
-      `Concurrent relapse` == "No" ~ FALSE,
+    `Concurrent relapse` == "Yes" ~ TRUE,
+    `Concurrent relapse` == "No" ~ FALSE,
   )) %>%
   arrange("Patient ID", "Date")
 
@@ -120,7 +118,7 @@ patient_assessments <- edmus_assessments %>%
   left_join(edmus_patients, by = "Patient ID")
 
 assessments_iedss <- edmus_assessments %>%
-  filter(!`Concurrent relapse`) %>%
+  filter(`Concurrent relapse` != TRUE) %>%
   group_by(`Patient ID`) %>%
   arrange(desc(Date), .by_group = TRUE) %>%
   mutate(
@@ -129,7 +127,8 @@ assessments_iedss <- edmus_assessments %>%
         return(NA)
       }
       min(x, y, na.rm = TRUE)
-    })) %>%
+    })
+  ) %>%
   ungroup() %>%
   select(`Patient ID`, Date, IEDSS)
 
@@ -138,8 +137,9 @@ edmus_assessments %<>%
     Age = (Date - patient_assessments$`Date of birth`) %/% dyears(1),
     Duration = Date - patient_assessments$`MS onset`,
     PI = if_else(Duration >= dyears(1),
-                 round(EDSS / (Duration %/% dyears(1)), 3),
-                 NA_real_)
+      EDSS / (Duration %/% dyears(1)), 3,
+      NA_real_
+    )
   ) %>%
   left_join(assessments_iedss, by = c("Patient ID", "Date")) %>%
   relocate(Age:Duration, .after = Date) %>%
@@ -152,7 +152,8 @@ edmus_patients %<>%
       summarize(
         `Time of follow-up start` = first(Date),
         `Age at follow-up start` = first(Age),
-      ), by = "Patient ID"
+      ),
+    by = "Patient ID"
   ) %>%
   mutate(
     `Consultation delay` =
@@ -160,16 +161,6 @@ edmus_patients %<>%
     `Duration of follow-up` =
       as_date(`Last clinical assessment`) - `Time of follow-up start`,
   )
-
-for (i in 0:10) {
-  assessments <- assessments_in_edss_range(edmus_assessments, i, i + 1)
-  edmus_patients %<>% left_join(assessments %>%
-    group_by(`Patient ID`) %>%
-    summarize(
-      "Time of EDSS {i}" := first(Date),
-      "Duration of EDSS {i}" := last(Date) - first(Date),
-    ), by = "Patient ID")
-}
 
 edmus_export <- function(path, anonimize_data = TRUE) {
   if (!file.exists(path)) {
@@ -187,6 +178,6 @@ edmus_export <- function(path, anonimize_data = TRUE) {
     if (anonimize_data) {
       data <- anonimize(data)
     }
-    write_csv(data, file.path(path, paste("edmus-", key, ".csv", sep="")))
+    write_csv(data, file.path(path, paste("edmus-", key, ".csv", sep = "")))
   }
 }
