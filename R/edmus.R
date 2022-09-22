@@ -118,7 +118,6 @@ patient_assessments <- edmus_assessments %>%
   left_join(edmus_patients, by = "Patient ID")
 
 assessments_iedss <- edmus_assessments %>%
-  filter(`Concurrent relapse` != TRUE) %>%
   group_by(`Patient ID`) %>%
   arrange(desc(Date), .by_group = TRUE) %>%
   mutate(
